@@ -40,6 +40,7 @@ def infer_predictions(
     predictions: Dict[str, List[np.ndarray]] = {output: [] for output in outputs}
 
     for i in range(0, num_spec, batch_size):
+        print("DEBUG OUTPUT: Batch",i)
         if num_spec < i + batch_size:
             current_batchsize = num_spec - i
         else:
@@ -53,6 +54,8 @@ def infer_predictions(
 
         infer_outputs = [grpcclient.InferRequestedOutput(output) for output in outputs]
 
+        print("DEBUG OUTPUT:",f"Num spec {num_spec}",len(infer_inputs),infer_inputs)
+        
         prediction = triton_client.infer(model, inputs=infer_inputs, outputs=infer_outputs)
 
         for output in outputs:
@@ -165,7 +168,7 @@ class SpectralLibrary:
         :param alignment: True if alignment present
         :return: grpc predictions if we are trying to generate spectral library
         """
-        triton_client = grpcclient.InferenceServerClient(url=self.config.prediction_server, ssl=True)
+        triton_client = grpcclient.InferenceServerClient(url=self.config.prediction_server, ssl=False)
         batch_size = 1000
 
         intensity_outputs = ["intensities", "mz", "annotation"]
@@ -183,15 +186,18 @@ class SpectralLibrary:
                 "INT32",
             ),
         }
+        print(library.spectra_data["COLLISION_ENERGY"])
         intensity_model = self.config.models["intensity"]
         if "tmt" in intensity_model.lower() or "ptm" in intensity_model.lower():
             library.spectra_data["FRAGMENTATION_GRPC"] = library.spectra_data["FRAGMENTATION"].apply(
-                lambda x: 2 if x == "HCD" else 1
+                lambda x: 1 if x == "HCD" else 2
             )
             intensity_input_data["fragmentation_types"] = (
                 library.spectra_data["FRAGMENTATION_GRPC"].to_numpy().reshape(-1, 1).astype(np.float32),
                 "FP32",
             )
+            
+        print("DEBUG OUTPUT:", library.spectra_data.iloc[1]["MODIFIED_SEQUENCE"])
 
         intensity_predictions = infer_predictions(
             triton_client,
